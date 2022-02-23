@@ -1,0 +1,305 @@
+---
+title: "h&m_Purchase_predict"
+author: "H"
+date: "2/8/2022"
+output: html_document
+---
+
+
+```{r}
+library(data.table)
+```
+
+```{r}
+article <- fread("articles.csv", header = TRUE)
+```
+
+```{r}
+customer <- fread("customers.csv", header = TRUE)
+```
+
+```{r}
+sample_submission <- fread("sample_submission.csv", header = TRUE)
+```
+
+```{r}
+transaction_train <- fread("transactions_train.csv", header = TRUE)
+```
+
+#### EDA 
+#### Data cleaning 
+```{r}
+str(article)
+```
+```{r}
+is.na(article)
+```
+
+```{r}
+library(tidyr)
+```
+####Delete NA  from age, fashion news frequency in Customer data 
+
+```{r}
+customer <- customer %>% drop_na(age)
+```
+```{r}
+customer
+```
+```{r}
+sum(is.na(customer$age))
+```
+```{r}
+sum(is.na(customer$fashion_news_frequency))
+
+```
+
+
+```{r}
+str(sample_submission)
+```
+
+```{r}
+summary(transaction_train)
+```
+```{r}
+transaction_train$t_dat <- as.Date(transaction_train$t_dat)
+```
+
+#### 1-1 Product distribution
+```{r}
+summary(article)
+```
+```{r}
+library(dplyr)
+library(ggplot2)
+library(wesanderson)
+```
+```{r}
+index <- article %>% group_by(Categories = index_group_name) %>% summarise(Count = n()) %>% mutate(Total = sum(Count), percent = Count/Total)
+```
+```{r}
+index
+```
+#### Top 10 product 
+
+```{r}
+productType <- article %>% group_by(product_name =product_type_name) %>% summarise(Count = n()) %>% arrange(desc(Count)) %>% head(10)
+
+```
+```{r}
+productType
+```
+```{r}
+names(wes_palettes)
+```
+
+
+### Visualization 
+```{r}
+ggplot(aes(x= "", y= percent, fill =Categories), data= index) +geom_bar(stat = "identity", position = position_fill()) +
+  coord_polar("y") + geom_text(aes(x= 1.25, label =Count ), position = position_fill(vjust= 0.5)) + theme(axis.title.x = element_blank(), axis.title.y = element_blank(), plot.title = element_text())  + scale_fill_manual(values=wes_palette(n=5, name="Darjeeling2"))
+```
+### majority of article categories is ladieswear and baby/children cloth. 
+```{r}
+ggplot(data= productType ,aes(x= product_name, y= Count)) + geom_bar(stat = "identity", fill = "Blue")
+```
+### The most frequent product types are Trousers and Dress Sweater and T-shirts are following. 
+### 1-2 customer demograhpic 
+
+```{r}
+customer
+```
+#### check missing data 
+
+```{r}
+customer$fashion_news_frequency
+```
+
+
+```{r}
+customer$fashion_news_frequency[customer$fashion_news_frequency == ""] <- NA
+
+```
+```{r}
+customer$club_member_status[customer$club_member_status == ""] <- NA
+```
+
+```{r}
+customer <- customer %>% drop_na(club_member_status, fashion_news_frequency)
+```
+
+```{r}
+member <- customer %>% group_by(club_member_status) %>% summarise(Count = n())
+```
+```{r}
+member
+```
+```{r}
+frequency <- customer %>% group_by(fashion_news_frequency) %>% summarise(Count =n())
+```
+
+
+```{r}
+frequency
+```
+#### We can see we have two type of none, "NONE" and "None" , so I change "NONE" -> None
+
+
+```{r}
+customer$fashion_news_frequency[customer$fashion_news_frequency == "NONE"] <- "None"
+
+```
+```{r}
+frequency
+```
+```{r}
+agegroup <- customer %>%  group_by(agegroup = cut(age, breaks = seq(16,75, by =5)), club_member_status, fashion_news_frequency) %>% drop_na(agegroup) %>% summarise(Count =n())
+```
+```{r}
+agegroup
+```
+```{r}
+summary(agegroup)
+```
+```{r}
+ggplot(aes(x =agegroup ,y = Count, fill = fashion_news_frequency), data = agegroup)+geom_bar(stat = "identity") +scale_fill_manual(values = wes_palette(n=3, name="Moonrise1"))
+```
+```{r}
+options(scipen = 100)
+
+```
+```{r}
+ggplot(aes(x =agegroup ,y = Count, fill = club_member_status), data = agegroup)+geom_bar(stat = "identity") +scale_fill_manual(values = wes_palette(n=3, name="Moonrise1"))
+```
+#### aged 20-30 is the major customers in Most age group activate club members, but mostly don't get fashion news frequently. 
+
+
+
+```{r}
+names(wes_palettes)
+```
+####1-3 EDA transaction train 
+
+```{r}
+transaction_train
+```
+#### Aggregate data 
+```{r}
+library(lubridate)
+```
+
+```{r}
+sum(is.na(transaction_train$article_id))
+```
+#### Customer ID =  00007d2de826758b65a93dd24ce629ed66842531df6699338c5570910a014cc2		
+
+
+```{r}
+customer_item <- transaction_train %>% select(t_dat, customer_id, article_id)
+```
+```{r}
+customer_item
+```
+```{r}
+customer_1 <- customer_item %>% filter(customer_id == "00007d2de826758b65a93dd24ce629ed66842531df6699338c5570910a014cc2") %>% group_by(Date = floor_date(t_dat, "month"), article_id)  %>% summarise(Count = n())
+
+```
+
+```{r}
+customer_1
+```
+```{r}
+summary(customer_1)
+```
+#### Customer ID =  00007d2de826758b65a93dd24ce629ed66842531df6699338c5570910a014cc2	bought total 110 items from Sep 2018 to 2020 May.
+
+### Article type 
+```{r}
+article
+```
+
+
+```{r}
+articletype <- article %>% select(article_id, prod_name, product_type_name, product_group_name, index_name, colour_group_name) 
+```
+```{r}
+customer_1_article <- merge(x =customer_1, y= articletype, by= "article_id") %>% arrange((Date))
+```
+```{r}
+customer_1_article
+```
+```{r}
+unique(customer_1_article$colour_group_name)
+```
+```{r}
+unique(customer_1_article$index_name)
+
+```
+
+```{r}
+unique(customer_1_article$product_group_name)
+
+```
+```{r}
+```
+
+
+```{r}
+unique(customer_1_article$colour_group_name)
+```
+
+
+
+```{r}
+freq_color_1 <- customer_1_article %>% group_by(color = colour_group_name) %>% summarise(Count = n())
+```
+```{r}
+freq_color_1
+```
+```{r}
+ggplot(aes(x= color, y= Count), data =freq_color_1) +geom_bar(stat = "identity", fill= "orange")
+```
+#### most color that customer A bought is Black, following white, lightpink
+
+```{r}
+freq_item_1 <- customer_1_article %>% group_by(group = product_group_name) %>% summarise(Count = n()) 
+```
+
+```{r}
+freq_item_1
+```
+```{r}
+ggplot(aes(x= group, y= Count), data =freq_item_1) +geom_bar(stat = "identity", fill = "orange")
+
+```
+```{r}
+freq_producttype_1 <- customer_1_article %>% group_by(type = product_type_name) %>% summarise(Count = n())%>% arrange(desc(Count))
+
+```
+```{r}
+freq_producttype_1
+```
+```{r}
+ggplot(data = freq_producttype_1, aes(x=type, y= Count)) +geom_bar(stat ="identity", fill= "orange")
+```
+#### top items that customer 1 bought is underwear bottom and bra, following blouse and skirt. 
+
+#### Buying pattern 
+
+```{r}
+customer_1_article
+```
+
+```{r}
+freq_date_1 <- customer_1_article %>% group_by(Date) %>% summarise(Count =sum(Count))
+```
+```{r}
+freq_date_1
+```
+
+```{r}
+ggplot(aes(x= Date, y= Count), data = freq_date_1) +geom_point()+geom_line()
+```
+
+
